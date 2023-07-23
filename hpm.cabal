@@ -1,0 +1,19 @@
+cabal-version:      2.4
+name:               hpm
+version:            0.1.0.0
+author:             amhsm6
+maintainer:         amhsm6@gmail.com
+
+executable hpm
+    main-is:          Main.hs
+
+    build-depends:    base ^>=4.16.4.0
+                    , unix
+                    , directory
+                    , filepath
+
+    hs-source-dirs:   app
+
+    default-language: Haskell2010
+
+    ghc-options:      -Wall -Wextra
