@@ -11,6 +11,7 @@ executable hpm
                     , unix
                     , directory
                     , filepath
+                    , binary
 
     hs-source-dirs:   app
 

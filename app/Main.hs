@@ -1,12 +1,15 @@
+{-# LANGUAGE DeriveGeneric #-}
+
 module Main where
 
 import Control.Monad
-import Data.IORef
 import System.Environment
 import System.Exit
 import System.Posix (fileExist, getFileStatus, isDirectory)
 import System.Directory
 import System.FilePath
+import GHC.Generics
+import Data.Binary
 
 config :: FilePath
 config = "/etc/hpm"
@@ -21,49 +24,64 @@ subdirs = [ "bin"
 outdir :: FilePath
 outdir = "/usr/local"
 
-copy :: IORef [FilePath] -> FilePath -> FilePath -> IO ()
-copy tree src dst = do
-    let out = dst </> takeFileName src
+data Tree = Node FilePath [Tree] | Leaf FilePath
+          deriving (Generic, Show)
 
-    fileExist out >>= \exists -> unless exists $ modifyIORef tree (src:)
+instance Binary Tree
 
-    dir <- isDirectory <$> getFileStatus src
-    if dir then do
-        createDirectoryIfMissing False out
-        listDirectory >=> mapM_ (\x -> copy tree (src </> x) out) $ src
+build :: FilePath -> IO Tree
+build path = do
+    let filename = takeFileName path
+
+    dir <- isDirectory <$> getFileStatus path
+    if dir then
+        listDirectory path >>= mapM (build . (path</>)) >>= pure . Node filename
     else
-        copyFile src out
+        pure $ Leaf filename
 
-new :: String -> IO ()
-new name = do
+cp :: Tree -> FilePath -> FilePath -> IO ()
+cp (Leaf name) src dst = copyFile (src </> name) (dst </> name)
+cp (Node name children) src dst = do
+    createDirectoryIfMissing False $ dst </> name
+    forM_ children $ \x -> cp x (src </> name) (dst </> name)
+
+rm :: Tree -> FilePath -> IO ()
+rm (Leaf name) path = removeFile $ path </> name
+rm (Node name children) path = do
+    forM_ children $ \x -> rm x $ path </> name
+
+    empty <- ((==0) . length) <$> listDirectory (path </> name)
+    when empty $ removeDirectory $ path </> name
+
+register :: String -> IO ()
+register name = do
     let lock = config </> name
-        process subdir = do
-            tree <- newIORef []
-            copy tree subdir outdir
-            readIORef tree >>= appendFile lock . unlines
-
     fileExist lock >>= \exists -> when exists packageExists
-    forM_ subdirs $ \x -> fileExist x >>= \exists -> when exists $ process x
+
+    trees <- fmap mconcat $ forM subdirs $ \x -> do
+        exists <- fileExist x 
+        if exists then pure <$> build x
+        else pure []
+    encodeFile lock trees
+
+    cp (Node "" trees) "." outdir
 
 remove :: String -> IO ()
 remove name = do
     let lock = config </> name
-        rm path = do
-            let out = outdir </> path
-            dir <- isDirectory <$> getFileStatus out
-            if dir then removeDirectory out else removeFile out
-
     fileExist lock >>= \exists -> unless exists packageNotFound
 
-    readFile lock >>= mapM_ rm . words
+    trees <- decodeFile lock :: IO [Tree]
     removeFile lock
+
+    rm (Node "" trees) outdir
 
 usage :: IO ()
 usage = do
     putStrLn "Usage: hpm <command> <package_name>"
     putStrLn "Available commands:"
-    putStrLn "    n        Register new package"
-    putStrLn "    r        Remove existing package"
+    putStrLn "    reg        Register new package"
+    putStrLn "    rem        Remove existing package"
     exitFailure
 
 packageExists :: IO ()
@@ -81,6 +99,6 @@ main = do
     args <- getArgs
     if length args /= 2 then usage
     else case head args of
-             "n" -> new $ last args
-             "r" -> remove $ last args
-             _   -> usage
+             "reg" -> register $ last args
+             "rem" -> remove $ last args
+             _     -> usage
