@@ -5,7 +5,7 @@ module Main where
 import Control.Monad
 import System.Environment
 import System.Exit
-import System.Posix (fileExist, getFileStatus, isDirectory)
+import System.Posix (getFileStatus, isDirectory)
 import System.Directory
 import System.FilePath
 import GHC.Generics
@@ -41,8 +41,17 @@ build path = do
 
 cp :: Tree -> FilePath -> FilePath -> IO ()
 cp (Leaf name) src dst = do
-    putStrLn $ "CP " ++ (src </> name) ++ " -> " ++ (dst </> name)
-    copyFile (src </> name) (dst </> name)
+    let srcFile = src </> name
+        dstFile = dst </> name
+
+    symlink <- pathIsSymbolicLink srcFile
+    if symlink then do
+        targetFile <- getSymbolicLinkTarget srcFile
+        putStrLn $ "SYMLINK " ++ (dst </> targetFile) ++ " <- " ++ dstFile
+        createFileLink targetFile dstFile
+    else do
+        putStrLn $ "CP " ++ srcFile ++ " -> " ++ dstFile
+        copyFile srcFile dstFile
 cp (Node name children) src dst = do
     createDirectoryIfMissing False $ dst </> name
     forM_ children $ \x -> cp x (src </> name) (dst </> name)
@@ -61,10 +70,10 @@ rm (Node name children) path = do
 
 register :: FilePath -> IO ()
 register lock = do
-    fileExist lock >>= \exists -> when exists packageExists
+    doesFileExist lock >>= \exists -> when exists packageExists
 
     trees <- fmap mconcat $ forM subdirs $ \x -> do
-        exists <- fileExist x 
+        exists <- doesDirectoryExist x 
         if exists then pure <$> build x
         else pure []
     encodeFile lock trees
@@ -74,7 +83,7 @@ register lock = do
 
 remove :: FilePath -> IO ()
 remove lock = do
-    fileExist lock >>= \exists -> unless exists packageNotFound
+    doesFileExist lock >>= \exists -> unless exists packageNotFound
 
     trees <- decodeFile lock :: IO [Tree]
     removeFile lock
