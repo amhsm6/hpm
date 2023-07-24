@@ -40,22 +40,27 @@ build path = do
         pure $ Leaf filename
 
 cp :: Tree -> FilePath -> FilePath -> IO ()
-cp (Leaf name) src dst = copyFile (src </> name) (dst </> name)
+cp (Leaf name) src dst = do
+    putStrLn $ "CP " ++ (src </> name) ++ " -> " ++ (dst </> name)
+    copyFile (src </> name) (dst </> name)
 cp (Node name children) src dst = do
     createDirectoryIfMissing False $ dst </> name
     forM_ children $ \x -> cp x (src </> name) (dst </> name)
 
 rm :: Tree -> FilePath -> IO ()
-rm (Leaf name) path = removeFile $ path </> name
+rm (Leaf name) path = do
+    putStrLn $ "RM " ++ (path </> name)
+    removeFile $ path </> name
 rm (Node name children) path = do
     forM_ children $ \x -> rm x $ path </> name
 
     empty <- ((==0) . length) <$> listDirectory (path </> name)
-    when empty $ removeDirectory $ path </> name
+    when empty $ do
+        putStrLn $ "EMPTY " ++ (path </> name) ++ " --> Removing"
+        removeDirectory $ path </> name
 
-register :: String -> IO ()
-register name = do
-    let lock = config </> name
+register :: FilePath -> IO ()
+register lock = do
     fileExist lock >>= \exists -> when exists packageExists
 
     trees <- fmap mconcat $ forM subdirs $ \x -> do
@@ -63,12 +68,12 @@ register name = do
         if exists then pure <$> build x
         else pure []
     encodeFile lock trees
+    putStrLn "Files tree built"
 
     cp (Node "" trees) "." outdir
 
-remove :: String -> IO ()
-remove name = do
-    let lock = config </> name
+remove :: FilePath -> IO ()
+remove lock = do
     fileExist lock >>= \exists -> unless exists packageNotFound
 
     trees <- decodeFile lock :: IO [Tree]
@@ -98,7 +103,9 @@ main :: IO ()
 main = do
     args <- getArgs
     if length args /= 2 then usage
-    else case head args of
-             "reg" -> register $ last args
-             "rem" -> remove $ last args
-             _     -> usage
+    else do
+        let lock = config </> last args
+        case head args of
+            "reg" -> register lock
+            "rem" -> remove lock
+            _     -> usage
