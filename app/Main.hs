@@ -5,7 +5,6 @@ module Main where
 import Control.Monad
 import System.Environment
 import System.Exit
-import System.Posix (getFileStatus, isDirectory)
 import System.Directory
 import System.FilePath
 import GHC.Generics
@@ -33,7 +32,7 @@ build :: FilePath -> IO Tree
 build path = do
     let filename = takeFileName path
 
-    dir <- isDirectory <$> getFileStatus path
+    dir <- doesDirectoryExist path
     if dir then
         listDirectory path >>= mapM (build . (path</>)) >>= pure . Node filename
     else
