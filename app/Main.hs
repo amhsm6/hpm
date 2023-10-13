@@ -3,12 +3,12 @@
 module Main where
 
 import Control.Monad
+import Data.Binary
+import GHC.Generics
 import System.Environment
 import System.Exit
 import System.Directory
 import System.FilePath
-import GHC.Generics
-import Data.Binary
 
 config :: FilePath
 config = "/etc/hpm"
@@ -71,23 +71,30 @@ register :: FilePath -> IO ()
 register lock = do
     doesFileExist lock >>= \exists -> when exists packageExists
 
-    trees <- fmap mconcat $ forM subdirs $ \x -> do
+    trees <- fmap concat $ forM subdirs $ \x -> do
         exists <- doesDirectoryExist x 
-        if exists then pure <$> build x
+        if exists then build x >>= \y -> pure [y]
         else pure []
-    encodeFile lock trees
     putStrLn "Files tree built"
-
     cp (Node "" trees) "." outdir
+
+    encodeFile lock trees
 
 remove :: FilePath -> IO ()
 remove lock = do
     doesFileExist lock >>= \exists -> unless exists packageNotFound
 
     trees <- decodeFile lock :: IO [Tree]
+    rm (Node "" trees) outdir
+
     removeFile lock
 
-    rm (Node "" trees) outdir
+copy :: FilePath -> IO ()
+copy lock = do
+    doesFileExist lock >>= \exists -> unless exists packageNotFound
+
+    trees <- decodeFile lock :: IO [Tree]
+    cp (Node "" trees) outdir "."
 
 usage :: IO ()
 usage = do
@@ -95,6 +102,7 @@ usage = do
     putStrLn "Available commands:"
     putStrLn "    reg        Register new package"
     putStrLn "    rem        Remove existing package"
+    putStrLn "    cpy        Copy file tree into current directory"
     exitFailure
 
 packageExists :: IO ()
@@ -110,10 +118,12 @@ packageNotFound = do
 main :: IO ()
 main = do
     args <- getArgs
-    if length args /= 2 then usage
+    if length args /= 2 then
+        usage
     else do
         let lock = config </> last args
         case head args of
             "reg" -> register lock
             "rem" -> remove lock
+            "cpy" -> copy lock
             _     -> usage
