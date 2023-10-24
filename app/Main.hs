@@ -5,10 +5,10 @@ module Main where
 import Control.Monad
 import Data.Binary
 import GHC.Generics
-import System.Environment
-import System.Exit
 import System.Directory
 import System.FilePath
+import System.Environment
+import System.Exit
 
 config :: FilePath
 config = "/etc/hpm"
@@ -24,14 +24,13 @@ outdir :: FilePath
 outdir = "/usr/local"
 
 data Tree = Node FilePath [Tree] | Leaf FilePath
-          deriving (Generic, Show)
+          deriving Generic
 
 instance Binary Tree
 
 build :: FilePath -> IO Tree
 build path = do
     let filename = takeFileName path
-
     dir <- doesDirectoryExist path
     if dir then
         listDirectory path >>= mapM (build . (path</>)) >>= pure . Node filename
