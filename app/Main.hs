@@ -1,8 +1,10 @@
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE DeriveGeneric #-}
 
 module Main where
 
 import Control.Monad
+import Control.Exception
 import Data.Binary
 import GHC.Generics
 import System.Directory
@@ -57,8 +59,11 @@ cp (Node name children) src dst = do
 rm :: Tree -> FilePath -> IO ()
 rm (Leaf name) path = do
     let filename = path </> name
+
+    symlink <- handle @IOException (const $ pure False) $ pathIsSymbolicLink filename
     exists <- doesFileExist filename
-    when exists $ do
+
+    when (symlink || exists) $ do
         putStrLn $ "RM " ++ filename
         removeFile filename
 rm (Node name children) path = do
