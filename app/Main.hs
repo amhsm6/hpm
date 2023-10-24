@@ -56,18 +56,23 @@ cp (Node name children) src dst = do
 
 rm :: Tree -> FilePath -> IO ()
 rm (Leaf name) path = do
-    putStrLn $ "RM " ++ (path </> name)
-    removeFile $ path </> name
+    let filename = path </> name
+    exists <- doesFileExist filename
+    when exists $ do
+        putStrLn $ "RM " ++ filename
+        removeFile filename
 rm (Node name children) path = do
-    forM_ children $ \x -> rm x $ path </> name
+    let dirname = path </> name
+    forM_ children $ \x -> rm x dirname
 
-    empty <- ((==0) . length) <$> listDirectory (path </> name)
+    exists <- doesDirectoryExist dirname
+    empty <- if exists then (==0) . length <$> listDirectory dirname else pure False
     when empty $ do
-        putStrLn $ "EMPTY " ++ (path </> name) ++ " --> Removing"
-        removeDirectory $ path </> name
+        putStrLn $ "EMPTY " ++ dirname ++ " --> Removing"
+        removeDirectory dirname
 
-register :: FilePath -> IO ()
-register lock = do
+install :: FilePath -> IO ()
+install lock = do
     doesFileExist lock >>= \exists -> when exists packageExists
 
     trees <- fmap concat $ forM subdirs $ \x -> do
@@ -75,17 +80,17 @@ register lock = do
         if exists then build x >>= \y -> pure [y]
         else pure []
     putStrLn "Files tree built"
-    cp (Node "" trees) "." outdir
 
     encodeFile lock trees
+    cp (Node "" trees) "." outdir
 
 remove :: FilePath -> IO ()
 remove lock = do
     doesFileExist lock >>= \exists -> unless exists packageNotFound
 
     trees <- decodeFile lock :: IO [Tree]
-    rm (Node "" trees) outdir
 
+    rm (Node "" trees) outdir
     removeFile lock
 
 copy :: FilePath -> IO ()
@@ -99,9 +104,9 @@ usage :: IO ()
 usage = do
     putStrLn "Usage: hpm <command> <package_name>"
     putStrLn "Available commands:"
-    putStrLn "    reg        Register new package"
-    putStrLn "    rem        Remove existing package"
-    putStrLn "    cpy        Copy file tree into current directory"
+    putStrLn "    ins        Install new package by copying files from current directory"
+    putStrLn "    rm         Remove existing package"
+    putStrLn "    cpy        Copy package contents into current directory"
     exitFailure
 
 packageExists :: IO ()
@@ -122,7 +127,7 @@ main = do
     else do
         let lock = config </> last args
         case head args of
-            "reg" -> register lock
-            "rem" -> remove lock
+            "ins" -> install lock
+            "rm" -> remove lock
             "cpy" -> copy lock
             _     -> usage
