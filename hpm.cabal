@@ -7,6 +7,8 @@ maintainer:         amhsm6@gmail.com
 executable hpm
     main-is:          Main.hs
 
+    other-modules:    Control.Monad.List
+
     build-depends:    base ^>=4.16.4.0
                     , binary
                     , directory

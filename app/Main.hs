@@ -4,6 +4,8 @@
 module Main where
 
 import Control.Monad
+import Control.Monad.List
+import Control.Monad.IO.Class
 import Control.Exception
 import Data.Binary
 import GHC.Generics
@@ -26,7 +28,7 @@ outdir :: FilePath
 outdir = "/usr/local"
 
 data Tree = Node FilePath [Tree] | Leaf FilePath
-          deriving Generic
+    deriving Generic
 
 instance Binary Tree
 
@@ -68,6 +70,7 @@ rm (Leaf name) path = do
         removeFile filename
 rm (Node name children) path = do
     let dirname = path </> name
+
     forM_ children $ \x -> rm x dirname
 
     exists <- doesDirectoryExist dirname
@@ -80,10 +83,12 @@ install :: FilePath -> IO ()
 install lock = do
     doesFileExist lock >>= \exists -> when exists packageExists
 
-    trees <- fmap concat $ forM subdirs $ \x -> do
-        exists <- doesDirectoryExist x 
-        if exists then build x >>= \y -> pure [y]
-        else pure []
+    trees <- runListT $ do
+        x <- fromList subdirs
+        exists <- liftIO $ doesDirectoryExist x
+        if exists then liftIO $ build x
+        else empty
+
     putStrLn "Files tree built"
 
     encodeFile lock trees
@@ -93,7 +98,7 @@ remove :: FilePath -> IO ()
 remove lock = do
     doesFileExist lock >>= \exists -> unless exists packageNotFound
 
-    trees <- decodeFile lock :: IO [Tree]
+    trees <- decodeFile lock
 
     rm (Node "" trees) outdir
     removeFile lock
@@ -102,7 +107,7 @@ copy :: FilePath -> IO ()
 copy lock = do
     doesFileExist lock >>= \exists -> unless exists packageNotFound
 
-    trees <- decodeFile lock :: IO [Tree]
+    trees <- decodeFile lock
     cp (Node "" trees) outdir "."
 
 usage :: IO ()
