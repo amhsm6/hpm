@@ -1,6 +1,6 @@
 module Control.Monad.List where
 
-import Control.Monad.IO.Class
+import Control.Monad.Trans
 import Data.List (singleton)
 
 newtype ListT m a = ListT { runListT :: m [a] }

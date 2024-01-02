@@ -5,7 +5,7 @@ module Main where
 
 import Control.Monad
 import Control.Monad.List
-import Control.Monad.IO.Class
+import Control.Monad.Trans
 import Control.Exception
 import Data.Binary
 import GHC.Generics

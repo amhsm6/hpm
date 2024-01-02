@@ -10,6 +10,7 @@ executable hpm
     other-modules:    Control.Monad.List
 
     build-depends:    base ^>=4.16.4.0
+                    , mtl
                     , binary
                     , directory
                     , filepath
